@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-navy text-white font-body;
+  margin: 0;
+  overflow: hidden;
+}
+
+.font-display {
+  letter-spacing: 0.04em;
+}
+
+/* Stage background — deep navy with gold radial spotlight */
+.stage-bg {
+  background:
+    radial-gradient(ellipse at top, rgba(244,196,48,0.18) 0%, transparent 55%),
+    radial-gradient(ellipse at bottom, rgba(37,99,235,0.18) 0%, transparent 55%),
+    linear-gradient(180deg, #050b22 0%, #02061a 100%);
+}
+
+/* Title glow */
+.title-glow {
+  background: linear-gradient(180deg, #fff7c2 0%, #f4c430 45%, #b8860b 100%);
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  text-shadow:
+    0 0 30px rgba(244,196,48,0.6),
+    0 4px 0 rgba(0,0,0,0.4);
+  filter: drop-shadow(0 0 12px rgba(244,196,48,0.45));
+}
+
+/* Score panel — bevel + inner glow */
+.panel-bevel {
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.25),
+    inset 0 -3px 0 rgba(0,0,0,0.35),
+    0 8px 24px rgba(0,0,0,0.5),
+    0 0 0 2px rgba(0,0,0,0.4);
+}
+
+/* Score panel — team-color glow ring */
+.panel-glow-blue { box-shadow: 0 0 30px rgba(37,99,235,0.5), inset 0 2px 0 rgba(255,255,255,0.2), inset 0 -3px 0 rgba(0,0,0,0.35); }
+.panel-glow-red  { box-shadow: 0 0 30px rgba(220,38,38,0.5), inset 0 2px 0 rgba(255,255,255,0.2), inset 0 -3px 0 rgba(0,0,0,0.35); }
+
+/* Turn score pulse ring */
+.turn-glow {
+  box-shadow:
+    0 0 0 3px rgba(34,197,94,0.6),
+    0 0 30px rgba(34,197,94,0.5),
+    inset 0 2px 0 rgba(255,255,255,0.15);
+  animation: turn-pulse 2.5s ease-in-out infinite;
+}
+@keyframes turn-pulse {
+  0%,100% { box-shadow: 0 0 0 3px rgba(34,197,94,0.6), 0 0 20px rgba(34,197,94,0.45), inset 0 2px 0 rgba(255,255,255,0.15); }
+  50%     { box-shadow: 0 0 0 3px rgba(34,197,94,0.9), 0 0 45px rgba(34,197,94,0.8), inset 0 2px 0 rgba(255,255,255,0.2); }
+}
+
+/* Number bevel — for revealed answer points */
+.num-badge {
+  background: linear-gradient(180deg, #1a3a8a 0%, #0a1230 100%);
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.2),
+    inset 0 -2px 0 rgba(0,0,0,0.5),
+    0 0 0 2px #f4c430,
+    0 0 12px rgba(244,196,48,0.4);
+}
+
+/* Unrevealed slot — Feud blue stripe */
+.slot-hidden {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(255,255,255,0.04) 0 12px,
+      rgba(255,255,255,0) 12px 24px
+    ),
+    linear-gradient(180deg, #1e3a8a 0%, #0a1f5c 100%);
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.15),
+    inset 0 -3px 0 rgba(0,0,0,0.45);
+}
+
+/* Revealed slot — bright blue Feud panel */
+.slot-revealed {
+  background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%);
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.4),
+    inset 0 -3px 0 rgba(0,0,0,0.4),
+    0 0 25px rgba(59,130,246,0.5),
+    0 0 0 2px #f4c430;
+}
+
+/* Slot position number — round gold disc */
+.pos-disc {
+  background: radial-gradient(circle at 30% 25%, #fff7c2 0%, #f4c430 50%, #8a6d12 100%);
+  color: #0a1230;
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.6),
+    inset 0 -3px 0 rgba(0,0,0,0.35),
+    0 4px 10px rgba(0,0,0,0.5);
+}
+
+/* Error X glow */
+.x-active {
+  color: #ef4444;
+  text-shadow:
+    0 0 18px rgba(239,68,68,0.9),
+    0 0 35px rgba(239,68,68,0.6);
+}
+.x-empty {
+  color: rgba(255,255,255,0.08);
+}
+
+/* Microphone divider */
+.vs-divider {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  background: linear-gradient(180deg, #f4c430, #b8860b);
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+}

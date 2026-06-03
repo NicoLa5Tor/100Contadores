@@ -1,0 +1,44 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: contadores
+      POSTGRES_USER: contadores
+      POSTGRES_PASSWORD: contadores123
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contadores -d contadores"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://contadores:contadores123@db:5432/contadores
+      EXCEL_PATH: /app/100cont.xlsx
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./100cont.xlsx:/app/100cont.xlsx:ro
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://localhost:8000
+      VITE_WS_URL: ws://localhost:8000/ws
+
+volumes:
+  pgdata:
