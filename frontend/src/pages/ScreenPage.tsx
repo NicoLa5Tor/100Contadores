@@ -1,11 +1,14 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { gsap } from 'gsap'
 import { useGameSocket } from '../hooks/useGameSocket'
+import { useSound } from '../hooks/useSound'
 import Scoreboard from '../components/Scoreboard'
 import AnswerBoard from '../components/AnswerBoard'
 import ErrorBombs from '../components/ErrorBombs'
 import StealOverlay from '../components/StealOverlay'
+import FaceOffOverlay from '../components/FaceOffOverlay'
+import FaceOffWinnerOverlay from '../components/FaceOffWinnerOverlay'
 import Bracket from '../components/Bracket'
 import type { Match } from '../types'
 
@@ -13,10 +16,109 @@ export default function ScreenPage() {
   const { gameId: gameIdStr } = useParams<{ gameId: string }>()
   const gameId = gameIdStr ? Number(gameIdStr) : null
   const { game, connected, error } = useGameSocket(gameId)
+  const { play } = useSound()
   const turnRef = useRef<HTMLDivElement>(null)
   const prevTurn = useRef(0)
 
   const activeMatch = pickActiveMatch(game?.matches || [])
+
+  // ---- Sound triggers ----
+  // 1. New question activated
+  const prevQuestionId = useRef<number | null>(null)
+  useEffect(() => {
+    const qid = activeMatch?.current_question?.id || null
+    if (qid && qid !== prevQuestionId.current) {
+      play('question-start')
+      // small delay so the face-off cue follows
+      setTimeout(() => play('face-off'), 350)
+    }
+    prevQuestionId.current = qid
+  }, [activeMatch?.current_question?.id])
+
+  // 2. Face-off winner picked
+  const prevControlSound = useRef<'A' | 'B' | null>(null)
+  useEffect(() => {
+    const cur = activeMatch?.controlling_team ?? null
+    if (cur && prevControlSound.current == null && activeMatch?.current_question) {
+      play('winner-buzzer')
+    }
+    prevControlSound.current = cur
+  }, [activeMatch?.controlling_team, activeMatch?.current_question?.id])
+
+  // 3. Answer revealed
+  const prevRevealedCount = useRef(0)
+  useEffect(() => {
+    const n = activeMatch?.revealed_answers.length ?? 0
+    if (n > prevRevealedCount.current) {
+      play('correct')
+    }
+    prevRevealedCount.current = n
+  }, [activeMatch?.revealed_answers.length])
+
+  // 4. Error count up
+  const prevErrors = useRef(0)
+  useEffect(() => {
+    const n = activeMatch?.errors_count ?? 0
+    if (n > prevErrors.current) {
+      play('wrong')
+    }
+    prevErrors.current = n
+  }, [activeMatch?.errors_count])
+
+  // 5. Steal activated
+  const prevSteal = useRef(false)
+  useEffect(() => {
+    const s = activeMatch?.steal_active ?? false
+    if (s && !prevSteal.current) {
+      play('steal')
+    }
+    prevSteal.current = s
+  }, [activeMatch?.steal_active])
+
+  // 6. Match finished
+  const prevMatchPhase = useRef<string | null>(null)
+  useEffect(() => {
+    const cur = activeMatch?.phase ?? null
+    if (cur === 'finished' && prevMatchPhase.current !== 'finished') {
+      play(activeMatch?.slot === 'Final' ? 'champion' : 'match-win')
+    }
+    prevMatchPhase.current = cur
+  }, [activeMatch?.phase])
+
+  // 7. Tournament finished
+  const prevStatus = useRef<string | null>(null)
+  useEffect(() => {
+    const cur = game?.status ?? null
+    if (cur === 'finished' && prevStatus.current && prevStatus.current !== 'finished') {
+      play('champion')
+    }
+    prevStatus.current = cur
+  }, [game?.status])
+
+  // Face-off winner celebration (~2s) when controlling_team transitions null -> A|B
+  const [celebrationSide, setCelebrationSide] = useState<'A' | 'B' | null>(null)
+  const prevControl = useRef<'A' | 'B' | null>(null)
+  const prevQid = useRef<number | null>(null)
+  useEffect(() => {
+    if (!activeMatch) return
+    const cur = activeMatch.controlling_team
+    const prev = prevControl.current
+    const qid = activeMatch.current_question?.id || null
+    const sameQuestion = qid === prevQid.current
+    prevControl.current = cur
+    prevQid.current = qid
+    if (
+      cur &&
+      prev == null &&
+      sameQuestion &&
+      activeMatch.current_question &&
+      !activeMatch.steal_active
+    ) {
+      setCelebrationSide(cur)
+      const t = setTimeout(() => setCelebrationSide(null), 2000)
+      return () => clearTimeout(t)
+    }
+  }, [activeMatch?.controlling_team, activeMatch?.current_question?.id, activeMatch?.steal_active])
 
   useEffect(() => {
     if (!activeMatch || !turnRef.current) return
@@ -125,6 +227,16 @@ export default function ScreenPage() {
   return (
     <div className="h-screen w-screen flex flex-col stage-bg p-2 md:p-3 overflow-hidden">
       <StealOverlay active={m.steal_active} stealingTeamName={stealingName} />
+      <FaceOffOverlay
+        active={!!m.current_question && !m.controlling_team && !m.steal_active}
+        teamAName={m.team_a_name}
+        teamBName={m.team_b_name}
+      />
+      <FaceOffWinnerOverlay
+        active={!!celebrationSide}
+        side={celebrationSide}
+        teamName={celebrationSide === 'A' ? m.team_a_name : m.team_b_name}
+      />
 
       <header className="text-center shrink-0 mb-2 h-[8vh] flex flex-col justify-center">
         <h1

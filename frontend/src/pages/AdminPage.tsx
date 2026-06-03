@@ -335,28 +335,43 @@ function MatchPanel({
                   <div className="text-lg font-bold">{q.text}</div>
                 </div>
 
+                {!m.controlling_team && (
+                  <div className="bg-yellow-900/40 border-2 border-yellow-500 rounded p-3 mb-3 text-center animate-pulse">
+                    <div className="font-display text-2xl text-yellow-300 uppercase tracking-widest">
+                      🥊 cara a cara
+                    </div>
+                    <div className="text-xs text-yellow-100/80 mt-1">
+                      Asigna el equipo ganador del buzzer antes de revelar.
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-3 mb-3">
                   <button
                     disabled={busy}
                     onClick={() => run(() => api.faceOff(gameId, m.id, 'A'))}
                     className={`flex-1 px-3 py-2 rounded font-bold ${
                       m.controlling_team === 'A'
-                        ? 'bg-blue-500'
+                        ? 'bg-blue-500 ring-2 ring-gold'
+                        : !m.controlling_team
+                        ? 'bg-blue-700 hover:bg-blue-600 ring-2 ring-yellow-400/60 animate-pulse'
                         : 'bg-blue-800 hover:bg-blue-700'
                     }`}
                   >
-                    Cara a cara → {m.team_a_name}
+                    🥊 Ganó {m.team_a_name}
                   </button>
                   <button
                     disabled={busy}
                     onClick={() => run(() => api.faceOff(gameId, m.id, 'B'))}
                     className={`flex-1 px-3 py-2 rounded font-bold ${
                       m.controlling_team === 'B'
-                        ? 'bg-red-500'
+                        ? 'bg-red-500 ring-2 ring-gold'
+                        : !m.controlling_team
+                        ? 'bg-red-700 hover:bg-red-600 ring-2 ring-yellow-400/60 animate-pulse'
                         : 'bg-red-800 hover:bg-red-700'
                     }`}
                   >
-                    Cara a cara → {m.team_b_name}
+                    🥊 Ganó {m.team_b_name}
                   </button>
                 </div>
 
@@ -380,9 +395,10 @@ function MatchPanel({
                           </span>
                         </div>
                         <button
-                          disabled={busy || revealed}
+                          disabled={busy || revealed || !m.controlling_team}
                           onClick={() => run(() => api.reveal(gameId, m.id, a.id))}
                           className="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm font-bold disabled:opacity-30"
+                          title={!m.controlling_team ? 'Haz cara a cara primero' : ''}
                         >
                           {revealed ? '✓' : 'Revelar'}
                         </button>
@@ -393,9 +409,10 @@ function MatchPanel({
 
                 <div className="flex gap-3 mb-3">
                   <button
-                    disabled={busy || errorsMax || m.steal_active}
+                    disabled={busy || errorsMax || m.steal_active || !m.controlling_team}
                     onClick={() => run(() => api.error(gameId, m.id))}
                     className="flex-1 bg-red-600 hover:bg-red-500 px-3 py-3 rounded font-bold text-lg disabled:opacity-30"
+                    title={!m.controlling_team ? 'Haz cara a cara primero' : ''}
                   >
                     ✗ ERROR ({m.errors_count}/3)
                   </button>
