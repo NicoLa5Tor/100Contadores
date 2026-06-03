@@ -7,7 +7,7 @@ interface Props {
   revealed: number[]
 }
 
-const SLOTS = 7
+const SLOTS = 10
 
 export default function AnswerBoard({ question, revealed }: Props) {
   const rowRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -47,8 +47,7 @@ export default function AnswerBoard({ question, revealed }: Props) {
   }
 
   const answers = question.answers
-  const visible = Math.min(SLOTS, Math.max(answers.length, 1))
-  const slots = Array.from({ length: visible }, (_, i) => answers[i] || null)
+  const slots = Array.from({ length: SLOTS }, (_, i) => answers[i] || null)
 
   return (
     <div className="h-full bg-gradient-to-b from-[#0a1230] to-black/90 rounded-3xl p-2 md:p-3 border-4 border-gold panel-bevel flex flex-col">
@@ -64,7 +63,7 @@ export default function AnswerBoard({ question, revealed }: Props) {
 
       {/* Answer slots — fill rest, equal rows */}
       <div
-        className="flex-1 min-h-0 grid gap-1.5"
+        className="flex-1 min-h-0 grid gap-1"
         style={{ gridTemplateRows: `repeat(${slots.length}, minmax(0, 1fr))` }}
       >
         {slots.map((ans, i) => {
