@@ -9,7 +9,6 @@ html, body, #root {
 body {
   @apply bg-navy text-white font-body;
   margin: 0;
-  overflow: hidden;
 }
 
 .font-display {

@@ -46,9 +46,9 @@ def _parse_sheet(ws, q_num_col, q_text_col, ans_col, pts_col):
                         answers.append((a_text.strip(), float(a_pts)))
                 j += 1
             if answers:
-                # Sort desc by points, position 1..N (cap 10)
+                # Sort desc by points, position 1..N (cap 7)
                 answers.sort(key=lambda x: x[1], reverse=True)
-                answers = answers[:10]
+                answers = answers[:7]
                 yield order_index, q_text, answers
             i = j
         else:

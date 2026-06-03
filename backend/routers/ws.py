@@ -1,4 +1,4 @@
-from typing import Set
+from typing import Dict, Set
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 router = APIRouter()
@@ -6,45 +6,94 @@ router = APIRouter()
 
 class ConnectionManager:
     def __init__(self):
-        self.active: Set[WebSocket] = set()
+        # game_id -> set of WebSocket
+        self.game_clients: Dict[int, Set[WebSocket]] = {}
+        # lobby clients (overview list of games)
+        self.lobby_clients: Set[WebSocket] = set()
 
-    async def connect(self, ws: WebSocket):
+    async def connect_game(self, game_id: int, ws: WebSocket):
         await ws.accept()
-        self.active.add(ws)
+        self.game_clients.setdefault(game_id, set()).add(ws)
 
-    def disconnect(self, ws: WebSocket):
-        self.active.discard(ws)
+    async def connect_lobby(self, ws: WebSocket):
+        await ws.accept()
+        self.lobby_clients.add(ws)
 
-    async def broadcast(self, payload: dict):
+    def disconnect_game(self, game_id: int, ws: WebSocket):
+        if game_id in self.game_clients:
+            self.game_clients[game_id].discard(ws)
+            if not self.game_clients[game_id]:
+                del self.game_clients[game_id]
+
+    def disconnect_lobby(self, ws: WebSocket):
+        self.lobby_clients.discard(ws)
+
+    async def broadcast(self, game_id: int, payload: dict):
         dead = []
-        for ws in list(self.active):
+        for ws in list(self.game_clients.get(game_id, set())):
             try:
                 await ws.send_json(payload)
             except Exception:
                 dead.append(ws)
         for ws in dead:
-            self.disconnect(ws)
+            self.disconnect_game(game_id, ws)
+
+    async def broadcast_lobby(self, payload: dict):
+        dead = []
+        for ws in list(self.lobby_clients):
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect_lobby(ws)
 
 
 manager = ConnectionManager()
 
 
-@router.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket):
-    # Lazy import to avoid circular
-    from routers.game import build_state_payload
+@router.websocket("/ws/games/{game_id}")
+async def ws_game(ws: WebSocket, game_id: int):
+    from routers.game import build_game_payload, _get_game
     from database import SessionLocal
 
-    await manager.connect(ws)
+    await manager.connect_game(game_id, ws)
     try:
-        # Send initial state
         async with SessionLocal() as session:
-            payload = await build_state_payload(session)
-        await ws.send_json({"type": "STATE_UPDATE", "data": payload})
+            try:
+                g = await _get_game(session, game_id)
+                payload = await build_game_payload(session, g)
+                await ws.send_json({"type": "STATE_UPDATE", "data": payload})
+            except Exception as e:
+                await ws.send_json({"type": "ERROR", "data": str(e)})
         while True:
-            # Keep socket alive; ignore inbound msgs
             await ws.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect(ws)
+        manager.disconnect_game(game_id, ws)
     except Exception:
-        manager.disconnect(ws)
+        manager.disconnect_game(game_id, ws)
+
+
+@router.websocket("/ws/lobby")
+async def ws_lobby(ws: WebSocket):
+    from sqlalchemy import select
+    from models import Game
+    from schemas import GameSummary
+    from database import SessionLocal
+
+    await manager.connect_lobby(ws)
+    try:
+        async with SessionLocal() as session:
+            res = await session.execute(select(Game).order_by(Game.created_at.desc()))
+            games = res.scalars().all()
+            summaries = [
+                GameSummary.model_validate(g, from_attributes=True).model_dump(mode="json")
+                for g in games
+            ]
+        await ws.send_json({"type": "LOBBY_UPDATE", "data": summaries})
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect_lobby(ws)
+    except Exception:
+        manager.disconnect_lobby(ws)

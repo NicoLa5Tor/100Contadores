@@ -7,7 +7,7 @@ interface Props {
   revealed: number[]
 }
 
-const SLOTS = 10
+const SLOTS = 7
 
 export default function AnswerBoard({ question, revealed }: Props) {
   const rowRefs = useRef<(HTMLDivElement | null)[]>([])

@@ -20,17 +20,53 @@ export interface QuestionLite {
   text: string
 }
 
-export interface GameState {
-  phase: 'waiting' | 'playing' | 'steal' | 'finished'
-  round_label: string
+export type Phase = 'waiting' | 'playing' | 'steal' | 'finished'
+
+export interface MatchSummary {
+  id: number
+  slot: 'L1' | 'L2' | 'Final'
+  label: string
+  order_index: number
+  round_key: string
+  threshold: number
   team_a_name: string
   team_b_name: string
   team_a_score: number
   team_b_score: number
+  phase: Phase
+  winner: 'A' | 'B' | null
+}
+
+export interface Match extends MatchSummary {
+  current_question: Question | null
   turn_score: number
   controlling_team: 'A' | 'B' | null
   errors_count: number
   revealed_answers: number[]
   steal_active: boolean
-  current_question: Question | null
+  used_question_ids: number[]
+}
+
+export interface GameSummary {
+  id: number
+  name: string
+  created_at: string
+  status: 'in_progress' | 'finished'
+  team_1_name: string
+  team_2_name: string
+  team_3_name: string
+  team_4_name: string
+  matches: MatchSummary[]
+}
+
+export interface Game {
+  id: number
+  name: string
+  created_at: string
+  status: 'in_progress' | 'finished'
+  team_1_name: string
+  team_2_name: string
+  team_3_name: string
+  team_4_name: string
+  matches: Match[]
 }

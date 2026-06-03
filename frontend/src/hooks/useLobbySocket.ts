@@ -1,23 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Game } from '../types'
+import type { GameSummary } from '../types'
 
 const WS_BASE =
   (import.meta.env.VITE_WS_URL || 'ws://localhost:8000').replace(/\/+$/, '')
 
-export function useGameSocket(gameId: number | null) {
-  const [game, setGame] = useState<Game | null>(null)
+export function useLobbySocket() {
+  const [games, setGames] = useState<GameSummary[] | null>(null)
   const [connected, setConnected] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
-    if (gameId == null) return
     let stopped = false
     let retry = 0
 
     const connect = () => {
       if (stopped) return
-      const ws = new WebSocket(`${WS_BASE}/ws/games/${gameId}`)
+      const ws = new WebSocket(`${WS_BASE}/ws/lobby`)
       wsRef.current = ws
       ws.onopen = () => {
         setConnected(true)
@@ -26,8 +24,7 @@ export function useGameSocket(gameId: number | null) {
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data)
-          if (msg.type === 'STATE_UPDATE') setGame(msg.data)
-          else if (msg.type === 'ERROR') setError(msg.data)
+          if (msg.type === 'LOBBY_UPDATE') setGames(msg.data)
         } catch {}
       }
       ws.onclose = () => {
@@ -45,7 +42,7 @@ export function useGameSocket(gameId: number | null) {
       stopped = true
       wsRef.current?.close()
     }
-  }, [gameId])
+  }, [])
 
-  return { game, connected, error }
+  return { games, connected }
 }
