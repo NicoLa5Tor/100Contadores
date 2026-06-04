@@ -15,6 +15,9 @@ export default function AdminPage() {
   const [questions, setQuestions] = useState<QuestionLite[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dialog, setDialog] = useState<{ msg: string; onOk: () => void } | null>(null)
+
+  const confirm2 = (msg: string, onOk: () => void) => setDialog({ msg, onOk })
 
   // Auto-select first non-finished match if none chosen
   useEffect(() => {
@@ -68,6 +71,13 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-navy text-white font-body">
+      {dialog && (
+        <ConfirmDialog
+          msg={dialog.msg}
+          onOk={() => { dialog.onOk(); setDialog(null) }}
+          onCancel={() => setDialog(null)}
+        />
+      )}
       <header className="sticky top-0 z-10 bg-black/70 backdrop-blur border-b border-gold/40 px-4 md:px-6 py-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3">
           <Link
@@ -134,6 +144,7 @@ export default function AdminPage() {
             busy={busy}
             run={run}
             gameId={gameId}
+            confirm2={confirm2}
           />
         )}
 
@@ -141,15 +152,12 @@ export default function AdminPage() {
           {m && (
             <button
               disabled={busy}
-              onClick={() => {
-                if (
-                  confirm(
-                    `¿Reiniciar la llave "${m.label}"? Borra marcadores, preguntas usadas y ganador.`
-                  )
-                ) {
-                  run(() => api.resetMatch(gameId, m.id))
-                }
-              }}
+              onClick={() =>
+                confirm2(
+                  `¿Reiniciar la llave "${m.label}"?\nBorra marcadores, preguntas usadas y ganador.`,
+                  () => run(() => api.resetMatch(gameId, m.id))
+                )
+              }
               className="bg-red-800 hover:bg-red-700 px-4 py-2 rounded text-sm"
             >
               Reiniciar llave activa
@@ -157,18 +165,19 @@ export default function AdminPage() {
           )}
           <button
             disabled={busy}
-            onClick={async () => {
-              if (
-                confirm(`¿Eliminar el torneo "${game.name}"? No se puede deshacer.`)
-              ) {
-                try {
-                  await api.deleteGame(gameId)
-                  navigate('/')
-                } catch (e: any) {
-                  setError(e.message || String(e))
+            onClick={() =>
+              confirm2(
+                `¿Eliminar el torneo "${game.name}"?\nEsta acción no se puede deshacer.`,
+                async () => {
+                  try {
+                    await api.deleteGame(gameId)
+                    navigate('/')
+                  } catch (e: any) {
+                    setError(e.message || String(e))
+                  }
                 }
-              }
-            }}
+              )
+            }
             className="bg-red-900 hover:bg-red-800 px-4 py-2 rounded text-sm"
           >
             Eliminar torneo
@@ -191,7 +200,7 @@ function ErrorScreen({ msg }: { msg: string }) {
 }
 
 function MatchPanel({
-  game, match, questions, busy, run, gameId,
+  game, match, questions, busy, run, gameId, confirm2,
 }: {
   game: any
   match: Match
@@ -199,6 +208,7 @@ function MatchPanel({
   busy: boolean
   run: (fn: () => Promise<any>) => Promise<void>
   gameId: number
+  confirm2: (msg: string, onOk: () => void) => void
 }) {
   const m = match
   const q = m.current_question
@@ -301,11 +311,12 @@ function MatchPanel({
                   {!['face_off', 'playing', 'steal', 'showcase'].includes(m.phase) && (
                     <button
                       disabled={busy}
-                      onClick={() => {
-                        if (confirm(`¿Cerrar la llave "${m.label}"? Se declara ganador por puntaje actual.`)) {
-                          run(() => api.finishMatch(gameId, m.id))
-                        }
-                      }}
+                      onClick={() =>
+                        confirm2(
+                          `¿Cerrar la llave "${m.label}"?\n🏆 Ganador: ${m.team_a_score >= m.team_b_score ? m.team_a_name : m.team_b_name} (${m.team_a_score} vs ${m.team_b_score} pts)`,
+                          () => run(() => api.finishMatch(gameId, m.id))
+                        )
+                      }
                       className="bg-gold text-black px-5 py-3 rounded-xl font-bold text-base animate-pulse disabled:opacity-40"
                     >
                       🏆 Cerrar llave · declarar ganador
@@ -694,6 +705,40 @@ function FaceOffAnswerCard({
           esperando…
         </div>
       )}
+    </div>
+  )
+}
+
+function ConfirmDialog({
+  msg, onOk, onCancel,
+}: {
+  msg: string
+  onOk: () => void
+  onCancel: () => void
+}) {
+  const lines = msg.split('\n')
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="w-full max-w-md bg-navy border-2 border-gold/60 rounded-2xl p-6 shadow-[0_0_40px_rgba(244,196,48,0.3)]">
+        <div className="font-display text-gold text-xl mb-1">{lines[0]}</div>
+        {lines[1] && (
+          <div className="text-white text-base font-bold mt-2">{lines[1]}</div>
+        )}
+        <div className="flex gap-3 justify-end mt-5">
+          <button
+            onClick={onCancel}
+            className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-bold"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onOk}
+            className="px-5 py-2 rounded-lg bg-gold text-black text-sm font-bold hover:brightness-110"
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

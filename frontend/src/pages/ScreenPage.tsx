@@ -228,23 +228,7 @@ export default function ScreenPage() {
         ? final.team_b_name
         : '—'
     return (
-      <div className="h-screen stage-bg flex flex-col items-center justify-center p-6">
-        <h1
-          className="font-display title-glow animate-bounce leading-none"
-          style={{ fontSize: 'clamp(3rem, 14vh, 12rem)' }}
-        >
-          🏆 CAMPEÓN 🏆
-        </h1>
-        <div
-          className="font-display text-white mt-6 drop-shadow-[0_0_30px_rgba(244,196,48,0.9)] uppercase tracking-widest"
-          style={{ fontSize: 'clamp(2rem, 8vh, 6rem)' }}
-        >
-          {winnerName}
-        </div>
-        <div className="mt-10 w-full max-w-5xl">
-          <Bracket matches={game.matches} />
-        </div>
-      </div>
+      <ChampionScreen winnerName={winnerName} finalMatch={final || null} />
     )
   }
 
@@ -380,7 +364,7 @@ export default function ScreenPage() {
         </div>
       </div>
 
-      <div ref={boardWrapRef} className="flex-1 min-h-0 mb-2 relative">
+      <div ref={boardWrapRef} className="flex-1 min-h-0 mb-2">
         <AnswerBoard
           question={m.current_question}
           revealed={m.revealed_answers}
@@ -389,26 +373,26 @@ export default function ScreenPage() {
           teamAName={m.team_a_name}
           teamBName={m.team_b_name}
         />
+      </div>
+
+      <div className="shrink-0 h-[8vh] relative">
+        <ErrorBombs count={m.errors_count} />
         {boardComplete && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div
-              className="font-display text-center px-8 py-4 rounded-3xl border-4 border-gold animate-bounce"
+              className="font-display text-center px-8 py-2 rounded-2xl border-2 border-gold animate-bounce"
               style={{
-                fontSize: 'clamp(1.5rem, 5vh, 4rem)',
-                background: 'radial-gradient(ellipse at center, rgba(10,18,48,0.9) 0%, rgba(0,0,0,0.85) 100%)',
-                textShadow: '0 0 30px rgba(244,196,48,1)',
+                fontSize: 'clamp(1rem, 2.8vh, 2rem)',
+                background: 'rgba(10,18,48,0.95)',
+                textShadow: '0 0 20px rgba(244,196,48,1)',
                 color: '#f4c430',
-                boxShadow: '0 0 60px rgba(244,196,48,0.5)',
+                boxShadow: '0 0 30px rgba(244,196,48,0.6)',
               }}
             >
               ¡Tablero completo!
             </div>
           </div>
         )}
-      </div>
-
-      <div className="shrink-0 h-[8vh]">
-        <ErrorBombs count={m.errors_count} />
       </div>
     </div>
   )
@@ -447,6 +431,219 @@ function MatchWinnerOverlay({ winner }: { winner: { name: string; label: string 
         style={{ fontSize: 'clamp(0.9rem, 2.5vh, 2rem)' }}
       >
         gana · {winner.label}
+      </div>
+    </div>
+  )
+}
+
+// Particle data — fixed so it doesn't re-randomize on re-render
+const PARTICLES = Array.from({ length: 60 }, (_, i) => {
+  const left = (i * 53 + 17) % 100
+  const delay = (i * 0.19) % 4
+  const dur = 3 + ((i * 0.23) % 3)
+  const size = i % 4 === 0 ? '1.6rem' : i % 4 === 1 ? '1.1rem' : i % 4 === 2 ? '0.8rem' : '0.6rem'
+  const palette = ['#f4c430', '#fff', '#fde68a', '#fbbf24', '#ef4444', '#3b82f6']
+  const color = palette[i % palette.length]
+  const shape = i % 4 === 0 ? '★' : i % 4 === 1 ? '✦' : i % 4 === 2 ? '◆' : '●'
+  return { left: `${left}%`, delay: `${delay}s`, dur: `${dur}s`, size, color, shape }
+})
+
+function ChampionScreen({
+  winnerName,
+  finalMatch,
+}: {
+  winnerName: string
+  finalMatch: Match | null
+}) {
+  const trophyRef = useRef<HTMLDivElement>(null)
+  const labelRef = useRef<HTMLDivElement>(null)
+  const nameRef = useRef<HTMLDivElement>(null)
+  const scoreRef = useRef<HTMLDivElement>(null)
+  const raysRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (raysRef.current) {
+      gsap.to(raysRef.current, {
+        rotation: 360,
+        duration: 30,
+        ease: 'none',
+        repeat: -1,
+      })
+    }
+    if (trophyRef.current) {
+      gsap.fromTo(
+        trophyRef.current,
+        { scale: 0, rotation: -20 },
+        { scale: 1, rotation: 0, duration: 1.1, ease: 'back.out(2.5)', delay: 0.1 }
+      )
+      gsap.to(trophyRef.current, {
+        y: '-=15',
+        duration: 1.4,
+        ease: 'sine.inOut',
+        yoyo: true,
+        repeat: -1,
+        delay: 1.3,
+      })
+    }
+    if (labelRef.current) {
+      gsap.fromTo(
+        labelRef.current,
+        { y: -50, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.8, ease: 'power3.out', delay: 0.7 }
+      )
+    }
+    if (nameRef.current) {
+      gsap.fromTo(
+        nameRef.current,
+        { scale: 0.2, opacity: 0 },
+        { scale: 1, opacity: 1, duration: 1, ease: 'back.out(1.7)', delay: 1.2 }
+      )
+    }
+    if (scoreRef.current) {
+      gsap.fromTo(
+        scoreRef.current,
+        { y: 40, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.7, ease: 'power3.out', delay: 1.9 }
+      )
+    }
+  }, [])
+
+  return (
+    <div
+      className="h-screen w-screen flex flex-col items-center justify-center overflow-hidden relative"
+      style={{
+        background:
+          'radial-gradient(ellipse at 50% 45%, #1a2a6c 0%, #0a0f2e 55%, #000 100%)',
+      }}
+    >
+      {/* Animated rays behind trophy */}
+      <div
+        ref={raysRef}
+        className="absolute pointer-events-none"
+        style={{
+          top: '50%',
+          left: '50%',
+          width: '120vh',
+          height: '120vh',
+          marginTop: '-60vh',
+          marginLeft: '-60vh',
+          background:
+            'conic-gradient(from 0deg, transparent 0deg, rgba(244,196,48,0.18) 8deg, transparent 16deg, transparent 30deg, rgba(244,196,48,0.12) 38deg, transparent 46deg, transparent 60deg, rgba(244,196,48,0.18) 68deg, transparent 76deg, transparent 90deg, rgba(244,196,48,0.12) 98deg, transparent 106deg, transparent 120deg, rgba(244,196,48,0.18) 128deg, transparent 136deg, transparent 150deg, rgba(244,196,48,0.12) 158deg, transparent 166deg, transparent 180deg, rgba(244,196,48,0.18) 188deg, transparent 196deg, transparent 210deg, rgba(244,196,48,0.12) 218deg, transparent 226deg, transparent 240deg, rgba(244,196,48,0.18) 248deg, transparent 256deg, transparent 270deg, rgba(244,196,48,0.12) 278deg, transparent 286deg, transparent 300deg, rgba(244,196,48,0.18) 308deg, transparent 316deg, transparent 330deg, rgba(244,196,48,0.12) 338deg, transparent 346deg, transparent 360deg)',
+          filter: 'blur(2px)',
+          zIndex: 0,
+        }}
+      />
+
+      {/* Falling confetti */}
+      <style>{`
+        @keyframes champ-fall {
+          0%   { transform: translateY(-12vh) rotate(0deg); opacity: 1; }
+          85%  { opacity: 1; }
+          100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+        }
+      `}</style>
+      {PARTICLES.map((p, i) => (
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: p.left,
+            fontSize: p.size,
+            color: p.color,
+            animation: `champ-fall ${p.dur} ${p.delay} infinite linear`,
+            pointerEvents: 'none',
+            zIndex: 1,
+            textShadow: '0 0 10px currentColor',
+          }}
+        >
+          {p.shape}
+        </div>
+      ))}
+
+      {/* Content stack — centered */}
+      <div className="relative z-10 flex flex-col items-center text-center px-6 max-w-5xl">
+        <div
+          ref={labelRef}
+          className="font-display text-gold uppercase tracking-[0.4em] mb-2"
+          style={{
+            fontSize: 'clamp(0.9rem, 2.5vh, 1.8rem)',
+            textShadow: '0 0 20px rgba(244,196,48,0.9)',
+          }}
+        >
+          ¡Campeón del torneo!
+        </div>
+
+        <div
+          ref={trophyRef}
+          style={{
+            fontSize: 'clamp(5rem, 20vh, 14rem)',
+            lineHeight: 1,
+            filter: 'drop-shadow(0 0 80px rgba(244,196,48,1)) drop-shadow(0 0 30px rgba(244,196,48,0.8))',
+          }}
+        >
+          🏆
+        </div>
+
+        <div
+          ref={nameRef}
+          className="font-display text-white uppercase mt-4 leading-none"
+          style={{
+            fontSize: 'clamp(2.5rem, 12vh, 10rem)',
+            textShadow:
+              '0 0 60px rgba(244,196,48,1), 0 0 120px rgba(244,196,48,0.6), 0 0 200px rgba(244,196,48,0.3)',
+            letterSpacing: '0.05em',
+          }}
+        >
+          {winnerName}
+        </div>
+
+        {finalMatch && (
+          <div
+            ref={scoreRef}
+            className="mt-8 flex items-center gap-4 md:gap-8 bg-black/60 border-2 border-gold/60 rounded-2xl px-6 py-3 backdrop-blur-sm"
+          >
+            <div className="text-center">
+              <div
+                className={`font-display ${
+                  finalMatch.winner === 'A' ? 'text-gold' : 'text-white/40'
+                }`}
+                style={{ fontSize: 'clamp(0.7rem, 1.6vh, 1rem)' }}
+              >
+                {finalMatch.team_a_name}
+              </div>
+              <div
+                className={`font-display leading-none ${
+                  finalMatch.winner === 'A' ? 'text-gold' : 'text-white/50'
+                }`}
+                style={{ fontSize: 'clamp(1.5rem, 5vh, 3.5rem)' }}
+              >
+                {finalMatch.team_a_score}
+              </div>
+            </div>
+            <div className="font-display text-gold/60" style={{ fontSize: 'clamp(1rem, 3vh, 2rem)' }}>
+              —
+            </div>
+            <div className="text-center">
+              <div
+                className={`font-display ${
+                  finalMatch.winner === 'B' ? 'text-gold' : 'text-white/40'
+                }`}
+                style={{ fontSize: 'clamp(0.7rem, 1.6vh, 1rem)' }}
+              >
+                {finalMatch.team_b_name}
+              </div>
+              <div
+                className={`font-display leading-none ${
+                  finalMatch.winner === 'B' ? 'text-gold' : 'text-white/50'
+                }`}
+                style={{ fontSize: 'clamp(1.5rem, 5vh, 3.5rem)' }}
+              >
+                {finalMatch.team_b_score}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -77,19 +77,19 @@ async def ws_game(ws: WebSocket, game_id: int):
 @router.websocket("/ws/lobby")
 async def ws_lobby(ws: WebSocket):
     from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
     from models import Game
-    from schemas import GameSummary
+    from routers.game import build_game_summary
     from database import SessionLocal
 
     await manager.connect_lobby(ws)
     try:
         async with SessionLocal() as session:
-            res = await session.execute(select(Game).order_by(Game.created_at.desc()))
+            res = await session.execute(
+                select(Game).options(selectinload(Game.matches)).order_by(Game.created_at.desc())
+            )
             games = res.scalars().all()
-            summaries = [
-                GameSummary.model_validate(g, from_attributes=True).model_dump(mode="json")
-                for g in games
-            ]
+            summaries = [await build_game_summary(g) for g in games]
         await ws.send_json({"type": "LOBBY_UPDATE", "data": summaries})
         while True:
             await ws.receive_text()
