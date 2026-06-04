@@ -20,7 +20,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!game) return
     if (activeMatchId == null) {
-      const playing = game.matches.find((m) => m.phase === 'playing' || m.phase === 'steal')
+      const playing = game.matches.find((m) => ['face_off', 'playing', 'steal', 'showcase'].includes(m.phase))
       const next = playing || game.matches.find((m) => m.phase !== 'finished') || game.matches[0]
       if (next) setActiveMatchId(next.id)
     }
@@ -285,7 +285,7 @@ function MatchPanel({
                     {q2.text}
                   </div>
                   <button
-                    disabled={busy || ['face_off', 'playing', 'steal'].includes(m.phase)}
+                    disabled={busy || ['face_off', 'playing', 'steal', 'showcase'].includes(m.phase)}
                     onClick={() => run(() => api.startQuestion(gameId, m.id, q2.id))}
                     className="bg-gold text-black px-3 py-1 rounded text-sm font-bold disabled:opacity-30"
                   >
@@ -294,8 +294,23 @@ function MatchPanel({
                 </div>
               ))}
               {visibleQuestions.length === 0 && (
-                <div className="text-white/50 text-sm italic">
-                  No quedan preguntas disponibles.
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <div className="text-white/50 text-sm italic text-center">
+                    No quedan preguntas disponibles.
+                  </div>
+                  {!['face_off', 'playing', 'steal', 'showcase'].includes(m.phase) && (
+                    <button
+                      disabled={busy}
+                      onClick={() => {
+                        if (confirm(`¿Cerrar la llave "${m.label}"? Se declara ganador por puntaje actual.`)) {
+                          run(() => api.finishMatch(gameId, m.id))
+                        }
+                      }}
+                      className="bg-gold text-black px-5 py-3 rounded-xl font-bold text-base animate-pulse disabled:opacity-40"
+                    >
+                      🏆 Cerrar llave · declarar ganador
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -344,7 +359,18 @@ function MatchPanel({
                   />
                 )}
 
-                {m.phase !== 'face_off' && (
+                {m.phase === 'showcase' && (
+                  <div className="bg-purple-900/40 border-2 border-purple-400 rounded-lg p-3 mb-3 text-center animate-pulse">
+                    <div className="font-display text-lg text-purple-200 uppercase tracking-widest">
+                      🎙 Modo presentación
+                    </div>
+                    <div className="text-xs text-purple-100/80 mt-1">
+                      Puntos ya acreditados. Sigue revelando para el show — no se suma más. Cierra cuando quieras.
+                    </div>
+                  </div>
+                )}
+
+                {m.phase !== 'face_off' && m.phase !== 'showcase' && (
                   <div className="bg-black/30 rounded p-2 mb-3 text-xs text-white/70 text-center">
                     Control: <b className="text-gold">
                       {m.controlling_team === 'A'
@@ -376,10 +402,10 @@ function MatchPanel({
                           </span>
                         </div>
                         <button
-                          disabled={busy || revealed || m.phase === 'face_off' || !m.controlling_team}
+                          disabled={busy || revealed || m.phase === 'face_off' || (m.phase !== 'showcase' && !m.controlling_team)}
                           onClick={() => run(() => api.reveal(gameId, m.id, a.id))}
                           className="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm font-bold disabled:opacity-30"
-                          title={m.phase === 'face_off' ? 'En face-off, usa el panel superior' : !m.controlling_team ? 'Haz cara a cara primero' : ''}
+                          title={m.phase === 'face_off' ? 'En face-off, usa el panel superior' : (m.phase !== 'showcase' && !m.controlling_team) ? 'Haz cara a cara primero' : ''}
                         >
                           {revealed ? '✓' : 'Revelar'}
                         </button>
@@ -390,10 +416,10 @@ function MatchPanel({
 
                 <div className="flex gap-3 mb-3">
                   <button
-                    disabled={busy || errorsMax || m.steal_active || !m.controlling_team}
+                    disabled={busy || errorsMax || m.steal_active || m.phase === 'showcase' || !m.controlling_team}
                     onClick={() => run(() => api.error(gameId, m.id))}
                     className="flex-1 bg-red-600 hover:bg-red-500 px-3 py-3 rounded font-bold text-lg disabled:opacity-30"
-                    title={!m.controlling_team ? 'Haz cara a cara primero' : ''}
+                    title={m.phase === 'showcase' ? 'Modo presentación, no se marcan errores' : !m.controlling_team ? 'Haz cara a cara primero' : ''}
                   >
                     ✗ ERROR ({m.errors_count}/3)
                   </button>

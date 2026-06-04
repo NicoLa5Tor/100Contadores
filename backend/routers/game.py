@@ -163,11 +163,7 @@ async def _maybe_create_final(session: AsyncSession, g: Game):
     g.matches.append(final_match)
 
 
-def _award_turn(m: Match, team: str):
-    if team == "A":
-        m.team_a_score += m.turn_score
-    else:
-        m.team_b_score += m.turn_score
+def _clear_question_state(m: Match):
     m.turn_score = 0
     m.steal_active = False
     m.controlling_team = None
@@ -179,15 +175,37 @@ def _award_turn(m: Match, team: str):
     m.face_off_b_answer_id = None
     m.face_off_a_missed = False
     m.face_off_b_missed = False
-    # Win check
-    if m.team_a_score >= m.threshold:
-        m.winner = "A"
-        m.phase = "finished"
-    elif m.team_b_score >= m.threshold:
-        m.winner = "B"
-        m.phase = "finished"
+    m.phase = "waiting"
+
+
+def _award_turn(m: Match, team: str):
+    if team == "A":
+        m.team_a_score += m.turn_score
     else:
-        m.phase = "waiting"
+        m.team_b_score += m.turn_score
+    m.turn_score = 0
+    m.steal_active = False
+    m.controlling_team = None
+    # Win check
+    if m.team_a_score >= m.threshold or m.team_b_score >= m.threshold:
+        if m.team_a_score >= m.threshold:
+            m.winner = "A"
+        else:
+            m.winner = "B"
+        m.phase = "finished"
+        # Clear board state on match end
+        m.current_question_id = None
+        m.errors_count = 0
+        m.revealed_answers = []
+        m.face_off_first_team = None
+        m.face_off_a_answer_id = None
+        m.face_off_b_answer_id = None
+        m.face_off_a_missed = False
+        m.face_off_b_missed = False
+    else:
+        # Showcase: keep question + revealed answers visible. Admin reveals rest
+        # for show (no scoring) and closes via /end-question.
+        m.phase = "showcase"
 
 
 async def _finalize_if_needed(session: AsyncSession, g: Game, m: Match):
@@ -572,7 +590,7 @@ async def reveal(
         raise HTTPException(400, "no active question")
     if m.phase == "face_off":
         raise HTTPException(400, "estás en cara a cara, usa /face-off-answer")
-    if not m.controlling_team:
+    if m.phase != "showcase" and not m.controlling_team:
         raise HTTPException(400, "debes hacer el cara a cara antes de revelar")
     q = await _get_question_with_answers(session, m.current_question_id)
     target = next((a for a in q.answers if a.id == data.answer_id), None)
@@ -583,14 +601,17 @@ async def reveal(
         return await build_game_payload(session, g)
     revealed.append(target.id)
     m.revealed_answers = revealed
-    m.turn_score = int(m.turn_score + round(target.points))
 
-    if m.steal_active:
-        stealing = "B" if m.controlling_team == "A" else "A"
-        _award_turn(m, stealing)
-    elif len(revealed) >= len(q.answers):
-        if m.controlling_team:
-            _award_turn(m, m.controlling_team)
+    if m.phase == "showcase":
+        pass  # No scoring, no auto-close — admin closes via /end-question.
+    else:
+        m.turn_score = int(m.turn_score + round(target.points))
+        if m.steal_active:
+            stealing = "B" if m.controlling_team == "A" else "A"
+            _award_turn(m, stealing)
+        elif len(revealed) >= len(q.answers):
+            if m.controlling_team:
+                _award_turn(m, m.controlling_team)
 
     await _finalize_if_needed(session, g, m)
     await session.commit()
@@ -612,6 +633,8 @@ async def error(
     m = await _get_match(session, game_id, match_id)
     if not m.current_question_id:
         raise HTTPException(400, "no active question")
+    if m.phase == "showcase":
+        raise HTTPException(400, "ya se acreditaron puntos, modo presentación")
     if not m.controlling_team:
         raise HTTPException(400, "debes hacer el cara a cara antes de marcar errores")
     if m.steal_active:
@@ -665,18 +688,47 @@ async def end_question(
     if m.controlling_team and m.turn_score > 0:
         _award_turn(m, m.controlling_team)
     else:
-        m.turn_score = 0
-        m.steal_active = False
-        m.controlling_team = None
-        m.current_question_id = None
-        m.errors_count = 0
-        m.revealed_answers = []
-        m.face_off_first_team = None
-        m.face_off_a_answer_id = None
-        m.face_off_b_answer_id = None
-        m.face_off_a_missed = False
-        m.face_off_b_missed = False
-        m.phase = "waiting"
+        _clear_question_state(m)
+    await _finalize_if_needed(session, g, m)
+    await session.commit()
+    res = await session.execute(
+        select(Game).options(selectinload(Game.matches)).where(Game.id == g.id)
+    )
+    g = res.scalar_one()
+    await _broadcast(session, g)
+    await _broadcast_lobby(session)
+    return await build_game_payload(session, g)
+
+
+@router.post("/games/{game_id}/matches/{match_id}/finish")
+async def finish_match(
+    game_id: int, match_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """Force-finish a match by score (used when questions run out)."""
+    g = await _get_game(session, game_id)
+    m = await _get_match(session, game_id, match_id)
+    if m.phase == "finished":
+        raise HTTPException(400, "match ya terminó")
+    # Award any pending turn score before closing
+    if m.turn_score > 0 and m.controlling_team:
+        if m.controlling_team == "A":
+            m.team_a_score += m.turn_score
+        else:
+            m.team_b_score += m.turn_score
+    m.winner = "A" if m.team_a_score >= m.team_b_score else "B"
+    m.phase = "finished"
+    m.turn_score = 0
+    m.steal_active = False
+    m.controlling_team = None
+    m.current_question_id = None
+    m.errors_count = 0
+    m.revealed_answers = []
+    m.face_off_first_team = None
+    m.face_off_a_answer_id = None
+    m.face_off_b_answer_id = None
+    m.face_off_a_missed = False
+    m.face_off_b_missed = False
     await _finalize_if_needed(session, g, m)
     await session.commit()
     res = await session.execute(

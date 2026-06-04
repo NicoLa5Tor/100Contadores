@@ -20,7 +20,7 @@ export interface QuestionLite {
   text: string
 }
 
-export type Phase = 'waiting' | 'face_off' | 'playing' | 'steal' | 'finished'
+export type Phase = 'waiting' | 'face_off' | 'playing' | 'steal' | 'showcase' | 'finished'
 
 export interface MatchSummary {
   id: number

@@ -19,6 +19,9 @@ export default function ScreenPage() {
   const { play } = useSound()
   const turnRef = useRef<HTMLDivElement>(null)
   const prevTurn = useRef(0)
+  const boardWrapRef = useRef<HTMLDivElement>(null)
+  const [boardComplete, setBoardComplete] = useState(false)
+  const prevAllRevealed = useRef(false)
 
   const activeMatch = pickActiveMatch(game?.matches || [])
 
@@ -78,6 +81,29 @@ export default function ScreenPage() {
     prevRevealedCount.current = n
   }, [activeMatch?.revealed_answers.length])
 
+  // 3b. All answers revealed in showcase → flash board + banner
+  useEffect(() => {
+    if (!activeMatch?.current_question) {
+      prevAllRevealed.current = false
+      return
+    }
+    const total = activeMatch.current_question.answers.length
+    const n = activeMatch.revealed_answers.length
+    const isAll = n >= total && activeMatch.phase === 'showcase'
+    if (isAll && !prevAllRevealed.current) {
+      setBoardComplete(true)
+      if (boardWrapRef.current) {
+        gsap.fromTo(
+          boardWrapRef.current,
+          { scale: 1.03, filter: 'brightness(2)' },
+          { scale: 1, filter: 'brightness(1)', duration: 1.2, ease: 'power3.out' }
+        )
+      }
+      setTimeout(() => setBoardComplete(false), 3500)
+    }
+    prevAllRevealed.current = isAll
+  }, [activeMatch?.revealed_answers.length, activeMatch?.current_question?.id, activeMatch?.phase])
+
   // 4. Error count up
   const prevErrors = useRef(0)
   useEffect(() => {
@@ -98,15 +124,26 @@ export default function ScreenPage() {
     prevSteal.current = s
   }, [activeMatch?.steal_active])
 
-  // 6. Match finished
-  const prevMatchPhase = useRef<string | null>(null)
+  // 6. Match finished — sound + winner celebration overlay
+  const prevMatchPhasesRef = useRef<Record<number, string>>({})
+  const [matchWinner, setMatchWinner] = useState<{ name: string; label: string } | null>(null)
+  const matchPhasesKey = game?.matches.map((mm) => `${mm.id}:${mm.phase}`).join(',') ?? ''
   useEffect(() => {
-    const cur = activeMatch?.phase ?? null
-    if (cur === 'finished' && prevMatchPhase.current !== 'finished') {
-      play(activeMatch?.slot === 'Final' ? 'champion' : 'match-win')
-    }
-    prevMatchPhase.current = cur
-  }, [activeMatch?.phase])
+    if (!game) return
+    game.matches.forEach((mm: Match) => {
+      const prev = prevMatchPhasesRef.current[mm.id]
+      if (mm.phase === 'finished' && prev && prev !== 'finished') {
+        play(mm.slot === 'Final' ? 'champion' : 'match-win')
+        if (mm.slot !== 'Final') {
+          const winnerName = mm.winner === 'A' ? mm.team_a_name : mm.team_b_name
+          setMatchWinner({ name: winnerName, label: mm.label })
+          setTimeout(() => setMatchWinner(null), 4500)
+        }
+      }
+      prevMatchPhasesRef.current[mm.id] = mm.phase
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchPhasesKey])
 
   // 7. Tournament finished
   const prevStatus = useRef<string | null>(null)
@@ -215,6 +252,7 @@ export default function ScreenPage() {
   if (!activeMatch || activeMatch.phase === 'waiting') {
     return (
       <div className="h-screen stage-bg flex flex-col p-4 overflow-hidden">
+        <MatchWinnerOverlay winner={matchWinner} />
         <header className="text-center shrink-0 mb-4">
           <h1
             className="font-display title-glow leading-none"
@@ -249,6 +287,7 @@ export default function ScreenPage() {
 
   return (
     <div className="h-screen w-screen flex flex-col stage-bg p-2 md:p-3 overflow-hidden">
+      <MatchWinnerOverlay winner={matchWinner} />
       <StealOverlay active={m.steal_active} stealingTeamName={stealingName} />
       <FaceOffOverlay
         active={m.phase === 'face_off' && !m.steal_active}
@@ -272,6 +311,11 @@ export default function ScreenPage() {
           style={{ fontSize: 'clamp(0.6rem, 1.2vh, 0.95rem)' }}
         >
           {m.label}
+          {m.phase === 'showcase' && (
+            <span className="ml-3 inline-block bg-purple-700 text-white px-2 py-0.5 rounded text-[0.7em] animate-pulse">
+              🎙 modo presentación
+            </span>
+          )}
         </div>
       </header>
 
@@ -286,27 +330,44 @@ export default function ScreenPage() {
         </div>
 
         <div className="col-span-4 flex flex-col items-center justify-center">
-          <div className="bg-gradient-to-b from-emerald-900/80 to-black/80 rounded-3xl px-3 py-2 w-full h-full flex flex-col items-center justify-center text-center turn-glow">
-            <div
-              className="uppercase tracking-[0.3em] text-emerald-300/90 font-bold leading-tight"
-              style={{ fontSize: 'clamp(0.55rem, 1.3vh, 0.85rem)' }}
-            >
-              Puntos en juego
+          {m.phase === 'showcase' ? (
+            <div className="bg-gradient-to-b from-purple-900/80 to-black/80 rounded-3xl px-3 py-2 w-full h-full flex flex-col items-center justify-center text-center">
+              <div
+                className="font-display text-purple-300 animate-pulse leading-none"
+                style={{ fontSize: 'clamp(1.5rem, 5vh, 3.5rem)' }}
+              >
+                🎙
+              </div>
+              <div
+                className="uppercase tracking-[0.2em] text-purple-300/90 font-bold leading-tight mt-1"
+                style={{ fontSize: 'clamp(0.55rem, 1.3vh, 0.85rem)' }}
+              >
+                Solo presentación
+              </div>
             </div>
-            <div
-              ref={turnRef}
-              className="font-display text-emerald-400 leading-none drop-shadow-[0_0_20px_rgba(34,197,94,0.7)]"
-              style={{ fontSize: 'clamp(2.5rem, 11vh, 7rem)' }}
-            >
-              {m.turn_score}
+          ) : (
+            <div className="bg-gradient-to-b from-emerald-900/80 to-black/80 rounded-3xl px-3 py-2 w-full h-full flex flex-col items-center justify-center text-center turn-glow">
+              <div
+                className="uppercase tracking-[0.3em] text-emerald-300/90 font-bold leading-tight"
+                style={{ fontSize: 'clamp(0.55rem, 1.3vh, 0.85rem)' }}
+              >
+                Puntos en juego
+              </div>
+              <div
+                ref={turnRef}
+                className="font-display text-emerald-400 leading-none drop-shadow-[0_0_20px_rgba(34,197,94,0.7)]"
+                style={{ fontSize: 'clamp(2.5rem, 11vh, 7rem)' }}
+              >
+                {m.turn_score}
+              </div>
+              <div
+                className="uppercase tracking-widest text-emerald-200/60 leading-none"
+                style={{ fontSize: 'clamp(0.5rem, 1vh, 0.75rem)' }}
+              >
+                ◆ meta {m.threshold} ◆
+              </div>
             </div>
-            <div
-              className="uppercase tracking-widest text-emerald-200/60 leading-none"
-              style={{ fontSize: 'clamp(0.5rem, 1vh, 0.75rem)' }}
-            >
-              ◆ meta {m.threshold} ◆
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="col-span-4">
@@ -319,7 +380,7 @@ export default function ScreenPage() {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 mb-2">
+      <div ref={boardWrapRef} className="flex-1 min-h-0 mb-2 relative">
         <AnswerBoard
           question={m.current_question}
           revealed={m.revealed_answers}
@@ -328,6 +389,22 @@ export default function ScreenPage() {
           teamAName={m.team_a_name}
           teamBName={m.team_b_name}
         />
+        {boardComplete && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div
+              className="font-display text-center px-8 py-4 rounded-3xl border-4 border-gold animate-bounce"
+              style={{
+                fontSize: 'clamp(1.5rem, 5vh, 4rem)',
+                background: 'radial-gradient(ellipse at center, rgba(10,18,48,0.9) 0%, rgba(0,0,0,0.85) 100%)',
+                textShadow: '0 0 30px rgba(244,196,48,1)',
+                color: '#f4c430',
+                boxShadow: '0 0 60px rgba(244,196,48,0.5)',
+              }}
+            >
+              ¡Tablero completo!
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="shrink-0 h-[8vh]">
@@ -337,10 +414,48 @@ export default function ScreenPage() {
   )
 }
 
+function MatchWinnerOverlay({ winner }: { winner: { name: string; label: string } | null }) {
+  if (!winner) return null
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center pointer-events-none"
+      style={{
+        background: 'radial-gradient(circle at center, rgba(10,18,48,0.97) 0%, rgba(0,0,0,0.98) 100%)',
+      }}
+    >
+      <div
+        className="absolute inset-0 opacity-20"
+        style={{
+          background:
+            'repeating-linear-gradient(45deg, transparent 0 40px, rgba(244,196,48,0.08) 40px 80px)',
+        }}
+      />
+      <div
+        className="font-display title-glow animate-bounce leading-none mb-4"
+        style={{ fontSize: 'clamp(3rem, 12vh, 10rem)' }}
+      >
+        🏆
+      </div>
+      <div
+        className="font-display text-white uppercase tracking-widest drop-shadow-[0_0_40px_rgba(244,196,48,0.9)] leading-none text-center px-6"
+        style={{ fontSize: 'clamp(2rem, 8vh, 7rem)' }}
+      >
+        {winner.name}
+      </div>
+      <div
+        className="font-display text-gold/80 uppercase tracking-[0.4em] mt-4"
+        style={{ fontSize: 'clamp(0.9rem, 2.5vh, 2rem)' }}
+      >
+        gana · {winner.label}
+      </div>
+    </div>
+  )
+}
+
 function pickActiveMatch(matches: Match[]): Match | null {
   if (!matches.length) return null
   const playing = matches.find(
-    (m) => m.phase === 'playing' || m.phase === 'steal' || m.phase === 'face_off'
+    (m) => ['face_off', 'playing', 'steal', 'showcase'].includes(m.phase)
   )
   if (playing) return playing
   const pending = matches.find((m) => m.phase !== 'finished')

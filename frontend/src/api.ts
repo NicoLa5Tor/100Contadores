@@ -69,6 +69,8 @@ export const api = {
     }),
   endQuestion: (gameId: number, matchId: number) =>
     req(`/api/games/${gameId}/matches/${matchId}/end-question`, { method: 'POST' }),
+  finishMatch: (gameId: number, matchId: number) =>
+    req(`/api/games/${gameId}/matches/${matchId}/finish`, { method: 'POST' }),
   resetMatch: (gameId: number, matchId: number) =>
     req(`/api/games/${gameId}/matches/${matchId}/reset`, { method: 'POST' }),
 }
