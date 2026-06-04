@@ -8,8 +8,10 @@ Si un archivo no existe, simplemente no suena (no rompe nada).
 | Archivo                | Cuándo suena                                                                          |
 | ---------------------- | ------------------------------------------------------------------------------------- |
 | `question-start.mp3`   | Al activar una pregunta nueva                                                         |
-| `face-off.mp3`         | Cuando aparece el overlay "🥊 CARA A CARA 🥊" (esperando que el moderador decida)     |
-| `winner-buzzer.mp3`    | Cuando el moderador escoge ganador del cara a cara (overlay "🏆 GANA X")              |
+| `face-off.mp3`         | Cuando aparece el overlay "🥊 CARA A CARA 🥊" (esperando buzzer)                      |
+| `buzz.mp3`             | Cuando se marca quién buzzeó primero                                                  |
+| `face-off-miss.mp3`    | Cuando un equipo falla su respuesta de cara a cara                                    |
+| `winner-buzzer.mp3`    | Cuando se resuelve el cara a cara y un equipo toma el control                         |
 | `correct.mp3`          | Al revelar una respuesta correcta                                                     |
 | `wrong.mp3`            | Al marcar un ✗ ERROR                                                                  |
 | `steal.mp3`            | Cuando se activa el ROBO (tras 3 errores)                                             |

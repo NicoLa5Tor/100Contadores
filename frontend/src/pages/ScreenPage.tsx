@@ -35,6 +35,29 @@ export default function ScreenPage() {
     prevQuestionId.current = qid
   }, [activeMatch?.current_question?.id])
 
+  // 1b. Buzzer pressed (face-off first team set)
+  const prevBuzzer = useRef<'A' | 'B' | null>(null)
+  useEffect(() => {
+    const cur = activeMatch?.face_off_first_team ?? null
+    if (cur && prevBuzzer.current == null && activeMatch?.current_question) {
+      play('buzz')
+    }
+    prevBuzzer.current = cur
+  }, [activeMatch?.face_off_first_team])
+
+  // 1c. Face-off miss
+  const prevMissA = useRef(false)
+  const prevMissB = useRef(false)
+  useEffect(() => {
+    const a = activeMatch?.face_off_a_missed ?? false
+    const b = activeMatch?.face_off_b_missed ?? false
+    if ((a && !prevMissA.current) || (b && !prevMissB.current)) {
+      play('face-off-miss')
+    }
+    prevMissA.current = a
+    prevMissB.current = b
+  }, [activeMatch?.face_off_a_missed, activeMatch?.face_off_b_missed])
+
   // 2. Face-off winner picked
   const prevControlSound = useRef<'A' | 'B' | null>(null)
   useEffect(() => {
@@ -228,9 +251,8 @@ export default function ScreenPage() {
     <div className="h-screen w-screen flex flex-col stage-bg p-2 md:p-3 overflow-hidden">
       <StealOverlay active={m.steal_active} stealingTeamName={stealingName} />
       <FaceOffOverlay
-        active={!!m.current_question && !m.controlling_team && !m.steal_active}
-        teamAName={m.team_a_name}
-        teamBName={m.team_b_name}
+        active={m.phase === 'face_off' && !m.steal_active}
+        match={m}
       />
       <FaceOffWinnerOverlay
         active={!!celebrationSide}
@@ -301,6 +323,10 @@ export default function ScreenPage() {
         <AnswerBoard
           question={m.current_question}
           revealed={m.revealed_answers}
+          faceOffAAnswerId={m.face_off_a_answer_id}
+          faceOffBAnswerId={m.face_off_b_answer_id}
+          teamAName={m.team_a_name}
+          teamBName={m.team_b_name}
         />
       </div>
 
@@ -313,7 +339,9 @@ export default function ScreenPage() {
 
 function pickActiveMatch(matches: Match[]): Match | null {
   if (!matches.length) return null
-  const playing = matches.find((m) => m.phase === 'playing' || m.phase === 'steal')
+  const playing = matches.find(
+    (m) => m.phase === 'playing' || m.phase === 'steal' || m.phase === 'face_off'
+  )
   if (playing) return playing
   const pending = matches.find((m) => m.phase !== 'finished')
   if (pending) return pending

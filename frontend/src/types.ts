@@ -20,7 +20,7 @@ export interface QuestionLite {
   text: string
 }
 
-export type Phase = 'waiting' | 'playing' | 'steal' | 'finished'
+export type Phase = 'waiting' | 'face_off' | 'playing' | 'steal' | 'finished'
 
 export interface MatchSummary {
   id: number
@@ -45,6 +45,11 @@ export interface Match extends MatchSummary {
   revealed_answers: number[]
   steal_active: boolean
   used_question_ids: number[]
+  face_off_first_team: 'A' | 'B' | null
+  face_off_a_answer_id: number | null
+  face_off_b_answer_id: number | null
+  face_off_a_missed: boolean
+  face_off_b_missed: boolean
 }
 
 export interface GameSummary {

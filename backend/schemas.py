@@ -57,6 +57,24 @@ class MatchOut(MatchSummary):
     revealed_answers: List[int]
     steal_active: bool
     used_question_ids: List[int]
+    face_off_first_team: Optional[str]
+    face_off_a_answer_id: Optional[int]
+    face_off_b_answer_id: Optional[int]
+    face_off_a_missed: bool
+    face_off_b_missed: bool
+
+
+class BuzzerIn(BaseModel):
+    team: str  # 'A' | 'B'
+
+
+class FaceOffAnswerIn(BaseModel):
+    team: str  # 'A' | 'B'
+    answer_id: int
+
+
+class FaceOffMissIn(BaseModel):
+    team: str  # 'A' | 'B'
 
 
 class GameSummary(BaseModel):

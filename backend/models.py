@@ -74,4 +74,11 @@ class Match(Base):
     used_question_ids = Column(ARRAY(Integer), nullable=False, default=list)
     winner = Column(String(1), nullable=True)  # 'A'|'B'|null
 
+    # --- Face-off state ---
+    face_off_first_team = Column(String(1), nullable=True)  # 'A'|'B'|null
+    face_off_a_answer_id = Column(Integer, ForeignKey("answers.id"), nullable=True)
+    face_off_b_answer_id = Column(Integer, ForeignKey("answers.id"), nullable=True)
+    face_off_a_missed = Column(Boolean, nullable=False, default=False)
+    face_off_b_missed = Column(Boolean, nullable=False, default=False)
+
     game = relationship("Game", back_populates="matches")

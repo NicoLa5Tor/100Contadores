@@ -38,6 +38,23 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ winner }),
     }),
+  buzzer: (gameId: number, matchId: number, team: 'A' | 'B') =>
+    req(`/api/games/${gameId}/matches/${matchId}/buzzer`, {
+      method: 'POST',
+      body: JSON.stringify({ team }),
+    }),
+  faceOffAnswer: (gameId: number, matchId: number, team: 'A' | 'B', answer_id: number) =>
+    req(`/api/games/${gameId}/matches/${matchId}/face-off-answer`, {
+      method: 'POST',
+      body: JSON.stringify({ team, answer_id }),
+    }),
+  faceOffMiss: (gameId: number, matchId: number, team: 'A' | 'B') =>
+    req(`/api/games/${gameId}/matches/${matchId}/face-off-miss`, {
+      method: 'POST',
+      body: JSON.stringify({ team }),
+    }),
+  faceOffReplay: (gameId: number, matchId: number) =>
+    req(`/api/games/${gameId}/matches/${matchId}/face-off-replay`, { method: 'POST' }),
   reveal: (gameId: number, matchId: number, answer_id: number) =>
     req(`/api/games/${gameId}/matches/${matchId}/reveal`, {
       method: 'POST',

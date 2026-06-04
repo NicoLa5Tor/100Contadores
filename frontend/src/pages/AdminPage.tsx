@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useGameSocket } from '../hooks/useGameSocket'
 import { api } from '../api'
@@ -285,7 +285,7 @@ function MatchPanel({
                     {q2.text}
                   </div>
                   <button
-                    disabled={busy || m.phase === 'playing' || m.phase === 'steal'}
+                    disabled={busy || ['face_off', 'playing', 'steal'].includes(m.phase)}
                     onClick={() => run(() => api.startQuestion(gameId, m.id, q2.id))}
                     className="bg-gold text-black px-3 py-1 rounded text-sm font-bold disabled:opacity-30"
                   >
@@ -335,45 +335,26 @@ function MatchPanel({
                   <div className="text-lg font-bold">{q.text}</div>
                 </div>
 
-                {!m.controlling_team && (
-                  <div className="bg-yellow-900/40 border-2 border-yellow-500 rounded p-3 mb-3 text-center animate-pulse">
-                    <div className="font-display text-2xl text-yellow-300 uppercase tracking-widest">
-                      🥊 cara a cara
-                    </div>
-                    <div className="text-xs text-yellow-100/80 mt-1">
-                      Asigna el equipo ganador del buzzer antes de revelar.
-                    </div>
-                  </div>
+                {m.phase === 'face_off' && (
+                  <FaceOffPanel
+                    match={m}
+                    gameId={gameId}
+                    busy={busy}
+                    run={run}
+                  />
                 )}
 
-                <div className="flex gap-3 mb-3">
-                  <button
-                    disabled={busy}
-                    onClick={() => run(() => api.faceOff(gameId, m.id, 'A'))}
-                    className={`flex-1 px-3 py-2 rounded font-bold ${
-                      m.controlling_team === 'A'
-                        ? 'bg-blue-500 ring-2 ring-gold'
-                        : !m.controlling_team
-                        ? 'bg-blue-700 hover:bg-blue-600 ring-2 ring-yellow-400/60 animate-pulse'
-                        : 'bg-blue-800 hover:bg-blue-700'
-                    }`}
-                  >
-                    🥊 Ganó {m.team_a_name}
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() => run(() => api.faceOff(gameId, m.id, 'B'))}
-                    className={`flex-1 px-3 py-2 rounded font-bold ${
-                      m.controlling_team === 'B'
-                        ? 'bg-red-500 ring-2 ring-gold'
-                        : !m.controlling_team
-                        ? 'bg-red-700 hover:bg-red-600 ring-2 ring-yellow-400/60 animate-pulse'
-                        : 'bg-red-800 hover:bg-red-700'
-                    }`}
-                  >
-                    🥊 Ganó {m.team_b_name}
-                  </button>
-                </div>
+                {m.phase !== 'face_off' && (
+                  <div className="bg-black/30 rounded p-2 mb-3 text-xs text-white/70 text-center">
+                    Control: <b className="text-gold">
+                      {m.controlling_team === 'A'
+                        ? m.team_a_name
+                        : m.controlling_team === 'B'
+                        ? m.team_b_name
+                        : '—'}
+                    </b>
+                  </div>
+                )}
 
                 <div className="space-y-2 mb-3">
                   {q.answers.map((a) => {
@@ -395,10 +376,10 @@ function MatchPanel({
                           </span>
                         </div>
                         <button
-                          disabled={busy || revealed || !m.controlling_team}
+                          disabled={busy || revealed || m.phase === 'face_off' || !m.controlling_team}
                           onClick={() => run(() => api.reveal(gameId, m.id, a.id))}
                           className="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm font-bold disabled:opacity-30"
-                          title={!m.controlling_team ? 'Haz cara a cara primero' : ''}
+                          title={m.phase === 'face_off' ? 'En face-off, usa el panel superior' : !m.controlling_team ? 'Haz cara a cara primero' : ''}
                         >
                           {revealed ? '✓' : 'Revelar'}
                         </button>
@@ -454,5 +435,239 @@ function MatchPanel({
         </div>
       )}
     </>
+  )
+}
+
+interface FaceOffPanelProps {
+  match: Match
+  gameId: number
+  busy: boolean
+  run: (fn: () => Promise<any>) => Promise<void>
+}
+
+function FaceOffModal({ children }: { children: ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+      <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-yellow-900/30 border-4 border-yellow-500 rounded-2xl p-5 md:p-6 shadow-[0_0_50px_rgba(244,196,48,0.4)]">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function FaceOffPanel(props: FaceOffPanelProps) {
+  const { match, gameId, busy, run } = props
+  const m = match
+  const q = m.current_question
+  if (!q) return null
+
+  // Step 1: pick buzzer winner
+  if (!m.face_off_first_team) {
+    return (
+      <FaceOffModal>
+        <div className="text-center mb-4">
+          <div className="font-display text-3xl md:text-4xl text-yellow-300 uppercase tracking-widest">
+            🥊 ¿Quién buzzeó primero?
+          </div>
+          <div className="text-xs text-yellow-100/70 mt-2">
+            Marca el equipo cuyo representante presionó primero.
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <button
+            disabled={busy}
+            onClick={() => run(() => api.buzzer(gameId, m.id, 'A'))}
+            className="flex-1 bg-blue-700 hover:bg-blue-600 ring-2 ring-yellow-400/60 animate-pulse px-3 py-4 rounded-xl font-bold text-xl"
+          >
+            🔔 {m.team_a_name}
+          </button>
+          <button
+            disabled={busy}
+            onClick={() => run(() => api.buzzer(gameId, m.id, 'B'))}
+            className="flex-1 bg-red-700 hover:bg-red-600 ring-2 ring-yellow-400/60 animate-pulse px-3 py-4 rounded-xl font-bold text-xl"
+          >
+            🔔 {m.team_b_name}
+          </button>
+        </div>
+      </FaceOffModal>
+    )
+  }
+
+  // Step 2: collect answer(s)
+  const first = m.face_off_first_team
+  const firstAnsId = first === 'A' ? m.face_off_a_answer_id : m.face_off_b_answer_id
+  const firstMissed = first === 'A' ? m.face_off_a_missed : m.face_off_b_missed
+  const otherTeam: 'A' | 'B' = first === 'A' ? 'B' : 'A'
+  const otherAnsId = first === 'A' ? m.face_off_b_answer_id : m.face_off_a_answer_id
+  const otherMissed = first === 'A' ? m.face_off_b_missed : m.face_off_a_missed
+  const firstName = first === 'A' ? m.team_a_name : m.team_b_name
+  const otherName = otherTeam === 'A' ? m.team_a_name : m.team_b_name
+
+  const firstActed = firstAnsId != null || firstMissed
+  const otherActed = otherAnsId != null || otherMissed
+  // Determine which team must answer next
+  const respondingTeam: 'A' | 'B' = firstActed ? otherTeam : first
+  const respondingName = respondingTeam === first ? firstName : otherName
+
+  const firstAns = firstAnsId ? q.answers.find((a) => a.id === firstAnsId) : null
+  const otherAns = otherAnsId ? q.answers.find((a) => a.id === otherAnsId) : null
+
+  return (
+    <FaceOffModal>
+      <div className="text-center mb-3">
+        <div className="font-display text-xl md:text-2xl text-yellow-300 uppercase tracking-widest">
+          🥊 Cara a cara · Buzzer: <span className="text-gold">{firstName}</span>
+        </div>
+        <div className="text-[11px] text-yellow-100/60 mt-1 truncate">
+          {q.text}
+        </div>
+      </div>
+
+      {/* Answers given so far */}
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <FaceOffAnswerCard
+          team="A"
+          teamName={m.team_a_name}
+          ans={first === 'A' ? firstAns : otherAns}
+          isFirst={first === 'A'}
+          missed={m.face_off_a_missed}
+        />
+        <FaceOffAnswerCard
+          team="B"
+          teamName={m.team_b_name}
+          ans={first === 'B' ? firstAns : otherAns}
+          isFirst={first === 'B'}
+          missed={m.face_off_b_missed}
+        />
+      </div>
+
+      {otherActed && firstActed ? (
+        <div className="bg-black/40 rounded p-2 mb-3 text-center">
+          <div className="font-display text-yellow-300">Resolviendo…</div>
+        </div>
+      ) : (
+        <>
+          <div className="bg-black/40 rounded p-2 mb-3 text-center">
+            <div className="text-xs text-yellow-200/80 uppercase tracking-widest">
+              Turno de
+            </div>
+            <div className="font-display text-2xl text-yellow-300">
+              {respondingName}
+            </div>
+            <div className="text-[10px] text-white/60 mt-1">
+              Escoge la respuesta que dijo (lista abajo) o marca que falló
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              run(() => api.faceOffMiss(gameId, m.id, respondingTeam))
+            }
+            className="w-full mb-3 bg-red-700 hover:bg-red-600 px-3 py-3 rounded font-bold text-base flex items-center justify-center gap-2 disabled:opacity-40"
+          >
+            <span className="text-2xl">❌</span>
+            Falló · {respondingName} no acertó
+          </button>
+        </>
+      )}
+
+      <div className="space-y-1 max-h-[35vh] overflow-y-auto pr-1">
+        {q.answers.map((a) => {
+          const alreadyUsed = a.id === firstAnsId || a.id === otherAnsId
+          return (
+            <button
+              key={a.id}
+              type="button"
+              disabled={busy || alreadyUsed}
+              onClick={() =>
+                run(() => api.faceOffAnswer(gameId, m.id, respondingTeam, a.id))
+              }
+              className={`w-full flex items-center justify-between p-2 rounded border text-left text-sm ${
+                alreadyUsed
+                  ? 'bg-green-900/40 border-green-600 opacity-60'
+                  : 'bg-blue-950/40 border-blue-900 hover:bg-blue-900/60'
+              } disabled:cursor-not-allowed`}
+            >
+              <span className="flex-1 mr-3">
+                <span className="text-gold mr-2">{a.position}.</span>
+                {a.text}{' '}
+                <span className="text-white/50">({Math.round(a.points)} pts)</span>
+              </span>
+              <span className="bg-yellow-500/20 text-yellow-200 px-2 py-0.5 rounded text-xs uppercase tracking-widest">
+                Asignar a {respondingName}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Manual override */}
+      <details className="mt-3 text-white/40 text-[10px]">
+        <summary className="cursor-pointer hover:text-white">
+          ¿Necesitas saltar el flujo? Forzar ganador del cara a cara
+        </summary>
+        <div className="flex gap-2 mt-2">
+          <button
+            disabled={busy}
+            onClick={() => run(() => api.faceOff(gameId, m.id, 'A'))}
+            className="flex-1 bg-blue-900 hover:bg-blue-800 px-2 py-1 rounded text-xs"
+          >
+            Forzar {m.team_a_name}
+          </button>
+          <button
+            disabled={busy}
+            onClick={() => run(() => api.faceOff(gameId, m.id, 'B'))}
+            className="flex-1 bg-red-900 hover:bg-red-800 px-2 py-1 rounded text-xs"
+          >
+            Forzar {m.team_b_name}
+          </button>
+        </div>
+      </details>
+    </FaceOffModal>
+  )
+}
+
+function FaceOffAnswerCard({
+  team, teamName, ans, isFirst, missed,
+}: {
+  team: 'A' | 'B'
+  teamName: string
+  ans: any
+  isFirst: boolean
+  missed?: boolean
+}) {
+  const bg = team === 'A' ? 'bg-blue-900/60 border-blue-500' : 'bg-red-900/60 border-red-500'
+  return (
+    <div
+      className={`relative rounded-lg p-2 border-2 ${bg} ${ans ? 'ring-1 ring-gold' : ''} ${
+        missed ? 'ring-2 ring-red-500' : ''
+      }`}
+    >
+      <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-white/70">
+        <span className="truncate">{teamName}</span>
+        {isFirst && <span className="text-yellow-300">🔔 buzzer</span>}
+      </div>
+      {missed ? (
+        <div className="font-display text-2xl text-red-400 mt-1 text-center">
+          ❌ falló
+        </div>
+      ) : ans ? (
+        <>
+          <div className="font-display text-base text-white truncate mt-1">
+            {ans.text}
+          </div>
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-[10px] text-white/60">posición #{ans.position}</span>
+            <span className="font-display text-gold text-lg">{Math.round(ans.points)} pts</span>
+          </div>
+        </>
+      ) : (
+        <div className="font-display text-base text-white/30 mt-1 italic">
+          esperando…
+        </div>
+      )}
+    </div>
   )
 }

@@ -10,6 +10,7 @@ from schemas import (
     GameOut, GameSummary, MatchOut, MatchSummary,
     QuestionOut, AnswerOut, QuestionLite,
     StartQuestionIn, FaceOffIn, RevealIn, StealIn, CreateGameIn,
+    BuzzerIn, FaceOffAnswerIn, FaceOffMissIn,
 )
 
 router = APIRouter(prefix="/api")
@@ -79,6 +80,11 @@ async def _match_full(session: AsyncSession, m: Match) -> dict:
         revealed_answers=list(m.revealed_answers or []),
         steal_active=m.steal_active,
         used_question_ids=list(m.used_question_ids or []),
+        face_off_first_team=m.face_off_first_team,
+        face_off_a_answer_id=m.face_off_a_answer_id,
+        face_off_b_answer_id=m.face_off_b_answer_id,
+        face_off_a_missed=bool(m.face_off_a_missed),
+        face_off_b_missed=bool(m.face_off_b_missed),
     ).model_dump(mode="json")
 
 
@@ -168,6 +174,11 @@ def _award_turn(m: Match, team: str):
     m.current_question_id = None
     m.errors_count = 0
     m.revealed_answers = []
+    m.face_off_first_team = None
+    m.face_off_a_answer_id = None
+    m.face_off_b_answer_id = None
+    m.face_off_a_missed = False
+    m.face_off_b_missed = False
     # Win check
     if m.team_a_score >= m.threshold:
         m.winner = "A"
@@ -282,12 +293,17 @@ async def start_question(
     if not q:
         raise HTTPException(404, "question not found")
     m.current_question_id = q.id
-    m.phase = "playing"
+    m.phase = "face_off"
     m.turn_score = 0
     m.controlling_team = None
     m.errors_count = 0
     m.revealed_answers = []
     m.steal_active = False
+    m.face_off_first_team = None
+    m.face_off_a_answer_id = None
+    m.face_off_b_answer_id = None
+    m.face_off_a_missed = False
+    m.face_off_b_missed = False
     used.append(q.id)
     m.used_question_ids = used
     await session.commit()
@@ -301,16 +317,241 @@ async def start_question(
     return await build_game_payload(session, g)
 
 
+@router.post("/games/{game_id}/matches/{match_id}/buzzer")
+async def buzzer(
+    game_id: int, match_id: int, data: BuzzerIn,
+    session: AsyncSession = Depends(get_session),
+):
+    """Mark which team buzzed first in the face-off."""
+    if data.team not in ("A", "B"):
+        raise HTTPException(400, "team must be 'A' or 'B'")
+    g = await _get_game(session, game_id)
+    m = await _get_match(session, game_id, match_id)
+    if not m.current_question_id:
+        raise HTTPException(400, "no active question")
+    if m.phase != "face_off":
+        raise HTTPException(400, "no estás en fase de cara a cara")
+    m.face_off_first_team = data.team
+    await session.commit()
+    res = await session.execute(
+        select(Game).options(selectinload(Game.matches)).where(Game.id == g.id)
+    )
+    g = res.scalar_one()
+    await _broadcast(session, g)
+    return await build_game_payload(session, g)
+
+
+@router.post("/games/{game_id}/matches/{match_id}/face-off-answer")
+async def face_off_answer(
+    game_id: int, match_id: int, data: FaceOffAnswerIn,
+    session: AsyncSession = Depends(get_session),
+):
+    """Reveal one team's face-off answer. Backend decides next step."""
+    if data.team not in ("A", "B"):
+        raise HTTPException(400, "team must be 'A' or 'B'")
+    g = await _get_game(session, game_id)
+    m = await _get_match(session, game_id, match_id)
+    if not m.current_question_id:
+        raise HTTPException(400, "no active question")
+    if m.phase != "face_off":
+        raise HTTPException(400, "no estás en fase de cara a cara")
+    if not m.face_off_first_team:
+        raise HTTPException(400, "primero indica quién buzzeó")
+
+    # First team must act first (answer OR miss)
+    a_acted = m.face_off_a_answer_id is not None or bool(m.face_off_a_missed)
+    b_acted = m.face_off_b_answer_id is not None or bool(m.face_off_b_missed)
+    if not a_acted and not b_acted:
+        if data.team != m.face_off_first_team:
+            raise HTTPException(400, f"primero responde el equipo {m.face_off_first_team}")
+
+    # Team can't reassign its own face-off slot
+    if data.team == "A" and m.face_off_a_answer_id is not None:
+        raise HTTPException(400, "Equipo A ya dio su respuesta de cara a cara")
+    if data.team == "B" and m.face_off_b_answer_id is not None:
+        raise HTTPException(400, "Equipo B ya dio su respuesta de cara a cara")
+
+    q = await _get_question_with_answers(session, m.current_question_id)
+    target = next((a for a in q.answers if a.id == data.answer_id), None)
+    if not target:
+        raise HTTPException(404, "answer not found")
+
+    revealed = list(m.revealed_answers or [])
+    if target.id not in revealed:
+        revealed.append(target.id)
+        m.revealed_answers = revealed
+        m.turn_score = int(m.turn_score + round(target.points))
+
+    if data.team == "A":
+        m.face_off_a_answer_id = target.id
+        m.face_off_a_missed = False
+    else:
+        m.face_off_b_answer_id = target.id
+        m.face_off_b_missed = False
+
+    _resolve_face_off(m, q)
+
+    await session.commit()
+    res = await session.execute(
+        select(Game).options(selectinload(Game.matches)).where(Game.id == g.id)
+    )
+    g = res.scalar_one()
+    await _broadcast(session, g)
+    await _broadcast_lobby(session)
+    return await build_game_payload(session, g)
+
+
+def _resolve_face_off(m: Match, q) -> None:
+    """Decide control / reset state based on face-off answers and misses."""
+    first = m.face_off_first_team
+    if not first:
+        return
+    other = "B" if first == "A" else "A"
+
+    a_acted = (m.face_off_a_answer_id is not None) or bool(m.face_off_a_missed)
+    b_acted = (m.face_off_b_answer_id is not None) or bool(m.face_off_b_missed)
+    first_acted = a_acted if first == "A" else b_acted
+    other_acted = b_acted if first == "A" else a_acted
+
+    if not first_acted:
+        return
+
+    first_ans_id = m.face_off_a_answer_id if first == "A" else m.face_off_b_answer_id
+    first_miss = m.face_off_a_missed if first == "A" else m.face_off_b_missed
+
+    # If first team got position #1 and other hasn't acted, instant win
+    if first_ans_id and not other_acted:
+        first_ans = next((a for a in q.answers if a.id == first_ans_id), None)
+        if first_ans and first_ans.position == 1:
+            m.controlling_team = first
+            m.phase = "playing"
+            return
+        return  # wait for other team
+
+    # First missed and other hasn't acted yet → wait
+    if first_miss and not other_acted:
+        return
+
+    if not other_acted:
+        return
+
+    # Both acted → resolve
+    other_ans_id = m.face_off_b_answer_id if first == "A" else m.face_off_a_answer_id
+    other_miss = m.face_off_b_missed if first == "A" else m.face_off_a_missed
+
+    if first_miss and other_miss:
+        # Both missed → auto-replay: clear face-off state, stay in face_off phase
+        m.face_off_first_team = None
+        m.face_off_a_answer_id = None
+        m.face_off_b_answer_id = None
+        m.face_off_a_missed = False
+        m.face_off_b_missed = False
+        m.turn_score = 0
+        m.revealed_answers = []
+        return
+    if first_miss:
+        m.controlling_team = other
+    elif other_miss:
+        m.controlling_team = first
+    else:
+        first_ans = next((a for a in q.answers if a.id == first_ans_id), None)
+        other_ans = next((a for a in q.answers if a.id == other_ans_id), None)
+        if first_ans and other_ans:
+            if first_ans.position <= other_ans.position:
+                m.controlling_team = first
+            else:
+                m.controlling_team = other
+        else:
+            return
+    m.phase = "playing"
+
+
+@router.post("/games/{game_id}/matches/{match_id}/face-off-replay")
+async def face_off_replay(
+    game_id: int, match_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """Reset face-off state (keep same question) — used when both teams missed."""
+    g = await _get_game(session, game_id)
+    m = await _get_match(session, game_id, match_id)
+    if m.phase != "face_off":
+        raise HTTPException(400, "no estás en fase de cara a cara")
+    m.face_off_first_team = None
+    m.face_off_a_answer_id = None
+    m.face_off_b_answer_id = None
+    m.face_off_a_missed = False
+    m.face_off_b_missed = False
+    m.turn_score = 0
+    m.revealed_answers = []
+    await session.commit()
+    res = await session.execute(
+        select(Game).options(selectinload(Game.matches)).where(Game.id == g.id)
+    )
+    g = res.scalar_one()
+    await _broadcast(session, g)
+    await _broadcast_lobby(session)
+    return await build_game_payload(session, g)
+
+
+@router.post("/games/{game_id}/matches/{match_id}/face-off-miss")
+async def face_off_miss(
+    game_id: int, match_id: int, data: FaceOffMissIn,
+    session: AsyncSession = Depends(get_session),
+):
+    """Mark one team's face-off answer as a miss (not on board)."""
+    if data.team not in ("A", "B"):
+        raise HTTPException(400, "team must be 'A' or 'B'")
+    g = await _get_game(session, game_id)
+    m = await _get_match(session, game_id, match_id)
+    if m.phase != "face_off":
+        raise HTTPException(400, "no estás en fase de cara a cara")
+    if not m.face_off_first_team:
+        raise HTTPException(400, "primero indica quién buzzeó")
+
+    # First team must act before the other
+    first = m.face_off_first_team
+    first_acted = (
+        (m.face_off_a_answer_id is not None) or m.face_off_a_missed
+        if first == "A"
+        else (m.face_off_b_answer_id is not None) or m.face_off_b_missed
+    )
+    if not first_acted and data.team != first:
+        raise HTTPException(400, f"primero responde el equipo {first}")
+
+    if data.team == "A":
+        m.face_off_a_missed = True
+        m.face_off_a_answer_id = None
+    else:
+        m.face_off_b_missed = True
+        m.face_off_b_answer_id = None
+
+    q = await _get_question_with_answers(session, m.current_question_id) if m.current_question_id else None
+    if q:
+        _resolve_face_off(m, q)
+
+    await session.commit()
+    res = await session.execute(
+        select(Game).options(selectinload(Game.matches)).where(Game.id == g.id)
+    )
+    g = res.scalar_one()
+    await _broadcast(session, g)
+    await _broadcast_lobby(session)
+    return await build_game_payload(session, g)
+
+
 @router.post("/games/{game_id}/matches/{match_id}/face-off")
-async def face_off(
+async def face_off_manual(
     game_id: int, match_id: int, data: FaceOffIn,
     session: AsyncSession = Depends(get_session),
 ):
+    """Legacy/manual override: directly grant control to a team."""
     if data.winner not in ("A", "B"):
         raise HTTPException(400, "winner must be 'A' or 'B'")
     g = await _get_game(session, game_id)
     m = await _get_match(session, game_id, match_id)
     m.controlling_team = data.winner
+    if m.phase == "face_off":
+        m.phase = "playing"
     await session.commit()
     res = await session.execute(
         select(Game).options(selectinload(Game.matches)).where(Game.id == g.id)
@@ -329,6 +570,8 @@ async def reveal(
     m = await _get_match(session, game_id, match_id)
     if not m.current_question_id:
         raise HTTPException(400, "no active question")
+    if m.phase == "face_off":
+        raise HTTPException(400, "estás en cara a cara, usa /face-off-answer")
     if not m.controlling_team:
         raise HTTPException(400, "debes hacer el cara a cara antes de revelar")
     q = await _get_question_with_answers(session, m.current_question_id)
@@ -428,6 +671,11 @@ async def end_question(
         m.current_question_id = None
         m.errors_count = 0
         m.revealed_answers = []
+        m.face_off_first_team = None
+        m.face_off_a_answer_id = None
+        m.face_off_b_answer_id = None
+        m.face_off_a_missed = False
+        m.face_off_b_missed = False
         m.phase = "waiting"
     await _finalize_if_needed(session, g, m)
     await session.commit()
@@ -458,6 +706,11 @@ async def reset_match(
     m.steal_active = False
     m.used_question_ids = []
     m.winner = None
+    m.face_off_first_team = None
+    m.face_off_a_answer_id = None
+    m.face_off_b_answer_id = None
+    m.face_off_a_missed = False
+    m.face_off_b_missed = False
     # If Final was reset, game goes back to in_progress
     if m.slot == "Final" and g.status == "finished":
         g.status = "in_progress"

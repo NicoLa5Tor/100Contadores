@@ -5,11 +5,19 @@ import type { Question } from '../types'
 interface Props {
   question: Question | null
   revealed: number[]
+  faceOffAAnswerId?: number | null
+  faceOffBAnswerId?: number | null
+  teamAName?: string
+  teamBName?: string
 }
 
 const SLOTS = 7
 
-export default function AnswerBoard({ question, revealed }: Props) {
+export default function AnswerBoard({
+  question, revealed,
+  faceOffAAnswerId, faceOffBAnswerId,
+  teamAName, teamBName,
+}: Props) {
   const rowRefs = useRef<(HTMLDivElement | null)[]>([])
   const prevRevealed = useRef<number[]>([])
 
@@ -51,7 +59,7 @@ export default function AnswerBoard({ question, revealed }: Props) {
 
   return (
     <div className="h-full bg-gradient-to-b from-[#0a1230] to-black/90 rounded-3xl p-2 md:p-3 border-4 border-gold panel-bevel flex flex-col">
-      {/* Question banner — fixed compact */}
+      {/* Question banner */}
       <div className="shrink-0 mb-2 bg-black/50 border-2 border-gold/60 rounded-xl py-1.5 px-4 flex items-center justify-center" style={{ minHeight: '5vh' }}>
         <div
           className="font-display text-center text-gold uppercase leading-tight tracking-wide"
@@ -61,23 +69,31 @@ export default function AnswerBoard({ question, revealed }: Props) {
         </div>
       </div>
 
-      {/* Answer slots — fill rest, equal rows */}
+      {/* Answer slots */}
       <div
         className="flex-1 min-h-0 grid gap-1"
         style={{ gridTemplateRows: `repeat(${slots.length}, minmax(0, 1fr))` }}
       >
         {slots.map((ans, i) => {
           const isRevealed = ans && revealed.includes(ans.id)
+          const faceOffSide: 'A' | 'B' | null =
+            ans && ans.id === faceOffAAnswerId
+              ? 'A'
+              : ans && ans.id === faceOffBAnswerId
+              ? 'B'
+              : null
           return (
             <div
               key={i}
               ref={(el) => (rowRefs.current[i] = el)}
-              className={`flex items-center gap-2 md:gap-3 px-2 md:px-3 rounded-xl min-h-0 overflow-hidden ${
+              className={`relative flex items-center gap-2 md:gap-3 px-2 md:px-3 rounded-xl min-h-0 overflow-hidden ${
                 isRevealed ? 'slot-revealed' : 'slot-hidden'
+              } ${faceOffSide === 'A' ? 'ring-2 ring-blue-400' : ''} ${
+                faceOffSide === 'B' ? 'ring-2 ring-red-400' : ''
               }`}
               style={{ perspective: 800 }}
             >
-              {/* Position disc — scales with row height */}
+              {/* Position disc */}
               <div
                 className="pos-disc font-display rounded-full flex items-center justify-center shrink-0 aspect-square"
                 style={{
@@ -96,7 +112,26 @@ export default function AnswerBoard({ question, revealed }: Props) {
                 {isRevealed && ans ? ans.text : '— — — — — —'}
               </div>
 
-              {/* Points badge — scales */}
+              {/* Face-off team badge */}
+              {faceOffSide && (
+                <div
+                  className={`shrink-0 px-2 py-0.5 rounded font-display uppercase tracking-widest leading-none ${
+                    faceOffSide === 'A'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-red-600 text-white'
+                  }`}
+                  style={{ fontSize: 'clamp(0.55rem, 1.4vh, 0.95rem)' }}
+                  title={
+                    faceOffSide === 'A'
+                      ? `Respondida por ${teamAName || 'A'}`
+                      : `Respondida por ${teamBName || 'B'}`
+                  }
+                >
+                  🥊 {faceOffSide === 'A' ? (teamAName || 'A').slice(0, 12) : (teamBName || 'B').slice(0, 12)}
+                </div>
+              )}
+
+              {/* Points badge */}
               <div
                 className="num-badge font-display rounded-lg text-center text-gold shrink-0 flex items-center justify-center"
                 style={{
