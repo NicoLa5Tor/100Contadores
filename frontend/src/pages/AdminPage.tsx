@@ -451,13 +451,6 @@ function MatchPanel({
                     <div className="flex gap-3">
                       <button
                         disabled={busy}
-                        onClick={() => run(() => api.steal(gameId, m.id, true))}
-                        className="flex-1 bg-green-600 hover:bg-green-500 px-3 py-2 rounded font-bold"
-                      >
-                        ✓ Robó
-                      </button>
-                      <button
-                        disabled={busy}
                         onClick={() => run(() => api.steal(gameId, m.id, false))}
                         className="flex-1 bg-red-600 hover:bg-red-500 px-3 py-2 rounded font-bold"
                       >
